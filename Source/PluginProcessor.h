@@ -23,8 +23,8 @@ public:
 
 	enum Mode 
 	{
-		Normal = 0,
-		Speed,
+		Norm = 0,
+		Fast,
 		Slow
 	};
     //==============================================================================
@@ -64,8 +64,18 @@ public:
     void getStateInformation (MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+	void setDelta(int delta);
+	void setFile(const File&);
+
 	Mode getMode() const;
 	void setMode(const Mode& mode);
+
+	void exportFile();
+private:
+	void playNorm(AudioBuffer<float>&, int);
+	void playFast(AudioBuffer<float>&, int);
+	void playSlow(AudioBuffer<float>&, int);
+
 private:
 	juce::AudioFormatManager mFormatManager;
 	std::unique_ptr<juce::AudioFormatReaderSource> mReaderSource;
@@ -75,6 +85,14 @@ private:
 	std::deque<float> mReadQueueR;
 
 	Mode mMode;
+
+	File mFile;
+	CriticalSection mCriticalSection;
+	int mDelta;
+
+	double mSampleRate = 44100.0;
+	int mSamplesPerBlock = 512;
+
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SuperSlowAudioProcessor)
 };

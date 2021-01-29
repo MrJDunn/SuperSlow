@@ -31,5 +31,12 @@ private:
     // access the processor object that created it.
     SuperSlowAudioProcessor& processor;
 
+	TextButton mButtonLoadFile;
+	Slider mSliderDelta;
+	ToggleButton mToggleFast;
+	ToggleButton mToggleNorm;
+	ToggleButton mToggleSlow;
+	TextButton mButtonExportFile;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SuperSlowAudioProcessorEditor)
 };

@@ -23,17 +23,13 @@ SuperSlowAudioProcessor::SuperSlowAudioProcessor()
 #endif
 	)
 	, mMode(Mode::Slow)
+	, mDelta(2)
 #endif
 {
-	File file("C:\\Users\\Jeff\\Music\\Diceworld-sinister_v1.wav");
-
 	mFormatManager.registerBasicFormats();
-
-	auto reader = mFormatManager.createReaderFor(file);
-	auto source(new juce::AudioFormatReaderSource(reader, true));
-
-	mTransportSource.setSource(source, 0, nullptr, reader->sampleRate);
-	mReaderSource.reset(source);
+	
+	File file("C:\\Users\\Jeff\\Music\\Diceworld-sinister_v1.wav");
+	setFile(file);
 }
 
 SuperSlowAudioProcessor::~SuperSlowAudioProcessor()
@@ -106,6 +102,9 @@ void SuperSlowAudioProcessor::changeProgramName(int index, const String& newName
 void SuperSlowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
 	mTransportSource.prepareToPlay(samplesPerBlock, sampleRate);
+
+	mSampleRate = sampleRate;
+	mSamplesPerBlock = samplesPerBlock;
 }
 
 void SuperSlowAudioProcessor::releaseResources()
@@ -139,12 +138,10 @@ bool SuperSlowAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts)
 
 void SuperSlowAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer& midiMessages)
 {
+	const ScopedLock myScopedLock(mCriticalSection);
 
 	auto totalNumInputChannels = getTotalNumInputChannels();
 	auto totalNumOutputChannels = getTotalNumOutputChannels();
-
-	int slowdown = 16; // max 100
-	int speedUp = 16; // max 16
 
 	ScopedNoDenormals noDenormals;
 
@@ -161,99 +158,14 @@ void SuperSlowAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffe
 
 	switch (mMode)
 	{
-	case SuperSlowAudioProcessor::Normal:
-
-		while(mReadQueueL.size() < getBlockSize() || mReadQueueR.size() < getBlockSize())
-		{
-			mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
-			int numSamples = buffer.getNumSamples();
-			
-			for (int channel = 0; channel < totalNumInputChannels; ++channel)
-			{
-				auto* channelData = buffer.getReadPointer(channel);
-
-				for (int i = 0; i < numSamples; ++i)
-				{
-					if (channel == 0)
-					{
-						mReadQueueL.push_back(channelData[i]);
-					}
-					if (channel == 1)
-					{
-						mReadQueueR.push_back(channelData[i]);
-					}
-				}
-			}
-
-			buffer.clear();
-
-		}
+	case SuperSlowAudioProcessor::Norm:
+		playNorm(buffer, totalNumInputChannels);
 		break;
-	case SuperSlowAudioProcessor::Speed:
-		while(mReadQueueL.size() < getBlockSize() || mReadQueueR.size() < getBlockSize())
-		{
-			mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
-			int numSamples = buffer.getNumSamples();
-
-			for (int channel = 0; channel < totalNumInputChannels; ++channel)
-			{
-				auto* channelData = buffer.getReadPointer(channel);
-
-				for (int i = 0; i < numSamples; i += speedUp)
-				{
-					if (channel == 0)
-					{
-						mReadQueueL.push_back(channelData[i]);
-					}
-					if (channel == 1)
-					{
-						mReadQueueR.push_back(channelData[i]);
-					}
-				}
-			}
-			buffer.clear();
-		}
+	case SuperSlowAudioProcessor::Fast:
+		playFast(buffer, totalNumInputChannels);
 		break;
 	case SuperSlowAudioProcessor::Slow:
-		while(mReadQueueL.size() < getBlockSize() || mReadQueueR.size() < getBlockSize())
-		{
-			mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
-
-			int numSamples = buffer.getNumSamples();
-
-			for (int channel = 0; channel < totalNumInputChannels; ++channel)
-			{
-				auto* channelData = buffer.getReadPointer(channel);
-
-				float stepSize = 0.f;
-
-				for (int i = 0; i < numSamples; ++i)
-				{
-					for (int j = 0; j < slowdown; ++j)
-					{
-						if (i + 1 < getBlockSize())
-						{
-							float lerpTarget = channelData[i + 1];
-							stepSize = (lerpTarget - channelData[i]) / (float)slowdown;
-						}
-						
-						float interpolatedAmplitude = channelData[i] + stepSize * j;
-
-						if (channel == 0)
-						{
-							mReadQueueL.push_back(interpolatedAmplitude);
-						}
-						if (channel == 1)
-						{
-							mReadQueueR.push_back(interpolatedAmplitude);
-						}
-					}
-				}
-
-			}
-
-			buffer.clear();
-		}
+		playSlow(buffer, totalNumInputChannels);
 		break;
 	default:
 		break;
@@ -273,12 +185,12 @@ void SuperSlowAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffe
 		auto* channelData = buffer.getWritePointer(channel);
 		for (int i = 0; i < getBlockSize(); ++i)
 		{
-			if (channel == 0)
+			if (channel == 0 && !mReadQueueL.empty())
 			{
 				channelData[i] = mReadQueueL.front();
 				mReadQueueL.pop_front();
 			}
-			if (channel == 1)
+			if (channel == 1 && !mReadQueueR.empty())
 			{
 				channelData[i] = mReadQueueR.front();
 				mReadQueueR.pop_front();
@@ -312,13 +224,217 @@ void SuperSlowAudioProcessor::setStateInformation(const void* data, int sizeInBy
 	// whose contents will have been created by the getStateInformation() call.
 }
 
-void SuperSlowAudioProcessor::setMode(const Mode & mode)
+void SuperSlowAudioProcessor::setDelta(int delta)
 {
+	const ScopedLock myScopedLock(mCriticalSection);
+
+	mDelta = delta;
+}
+
+void SuperSlowAudioProcessor::setFile(const File& file)
+{
+	const ScopedLock myScopedLock(mCriticalSection);
+
+	mFile = file;
+
+	auto reader = mFormatManager.createReaderFor(mFile);
+	auto source(new juce::AudioFormatReaderSource(reader, true));
+
+	mTransportSource.setSource(source, 0, nullptr, reader->sampleRate);
+	mReaderSource.reset(source);
+}
+
+void SuperSlowAudioProcessor::setMode(const Mode& mode)
+{
+	const ScopedLock myScopedLock(mCriticalSection);
 	mMode = mode;
+}
+
+void SuperSlowAudioProcessor::playNorm(AudioBuffer<float>& buffer, int totalNumInputChannels)
+{
+		while(mReadQueueL.size() < getBlockSize() || mReadQueueR.size() < getBlockSize())
+		{
+			mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
+			int numSamples = buffer.getNumSamples();
+			
+			for (int channel = 0; channel < totalNumInputChannels; ++channel)
+			{
+				auto* channelData = buffer.getReadPointer(channel);
+
+				for (int i = 0; i < numSamples; ++i)
+				{
+					if (channel == 0)
+					{
+						mReadQueueL.push_back(channelData[i]);
+					}
+					if (channel == 1)
+					{
+						mReadQueueR.push_back(channelData[i]);
+					}
+				}
+			}
+
+			buffer.clear();
+
+		}
+}
+
+void SuperSlowAudioProcessor::playFast(AudioBuffer<float>& buffer, int totalNumInputChannels)
+{
+	while (mReadQueueL.size() < getBlockSize() || mReadQueueR.size() < getBlockSize())
+	{
+		mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
+		int numSamples = buffer.getNumSamples();
+
+		for (int channel = 0; channel < totalNumInputChannels; ++channel)
+		{
+			auto* channelData = buffer.getReadPointer(channel);
+
+			for (int i = 0; i < numSamples; i += mDelta)
+			{
+				if (channel == 0)
+				{
+					mReadQueueL.push_back(channelData[i]);
+				}
+				if (channel == 1)
+				{
+					mReadQueueR.push_back(channelData[i]);
+				}
+			}
+		}
+		buffer.clear();
+	}
+}
+
+void SuperSlowAudioProcessor::playSlow(AudioBuffer<float>& buffer, int totalNumInputChannels)
+{
+	while (mReadQueueL.size() < getBlockSize() || mReadQueueR.size() < getBlockSize())
+	{
+		mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
+
+		int numSamples = buffer.getNumSamples();
+
+		for (int channel = 0; channel < totalNumInputChannels; ++channel)
+		{
+			auto* channelData = buffer.getReadPointer(channel);
+
+			float stepSize = 0.f;
+
+			for (int i = 0; i < numSamples; ++i)
+			{
+				for (int j = 0; j < mDelta; ++j)
+				{
+					if (i + 1 < getBlockSize())
+					{
+						float lerpTarget = channelData[i + 1];
+						stepSize = (lerpTarget - channelData[i]) / (float)mDelta;
+					}
+
+					float interpolatedAmplitude = channelData[i] + stepSize * j;
+
+					if (channel == 0)
+					{
+						mReadQueueL.push_back(interpolatedAmplitude);
+					}
+					if (channel == 1)
+					{
+						mReadQueueR.push_back(interpolatedAmplitude);
+					}
+				}
+			}
+
+		}
+
+		buffer.clear();
+	}
+}
+
+void SuperSlowAudioProcessor::exportFile()
+{
+	const ScopedLock myScopedLock(mCriticalSection);
+
+	int totalNumInputChannels = getTotalNumInputChannels();
+	int totalNumOutputChannels = getTotalNumOutputChannels();
+	AudioBuffer<float> buffer(totalNumInputChannels, mSamplesPerBlock);
+
+
+	File testFile("C:\\Users\\Jeff\\Music\\test.wav");
+
+	if (testFile.existsAsFile())
+		testFile.deleteFile();
+
+	FileOutputStream* os = new FileOutputStream(testFile);
+
+	WavAudioFormat audioFormat;
+
+	juce::AudioFormatWriter* writerSource = audioFormat.createWriterFor(os, mSampleRate, totalNumInputChannels, 16,
+		WavAudioFormat::createBWAVMetadata("","","",Time::getCurrentTime(),0,""), 0);
+
+	if(writerSource != nullptr)
+	{
+		mReadQueueL.clear();
+		mReadQueueR.clear();
+
+		setFile(mFile);
+		mTransportSource.setPosition(0.0);
+		mTransportSource.stop();
+		mTransportSource.start();
+
+		while (mTransportSource.isPlaying())
+		{
+			for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
+				buffer.clear(i, 0, buffer.getNumSamples());
+
+			switch (mMode)
+			{
+			case SuperSlowAudioProcessor::Norm:
+				playNorm(buffer, totalNumInputChannels);
+				break;
+			case SuperSlowAudioProcessor::Fast:
+				playFast(buffer, totalNumInputChannels);
+				break;
+			case SuperSlowAudioProcessor::Slow:
+				playSlow(buffer, totalNumInputChannels);
+				break;
+			default:
+				break;
+			}
+
+			for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
+				buffer.clear(i, 0, buffer.getNumSamples());
+
+			for (int channel = 0; channel < totalNumInputChannels; ++channel)
+			{
+				auto* channelData = buffer.getWritePointer(channel);
+
+				for (int i = 0; i < mSamplesPerBlock; ++i)
+				{
+					if (channel == 0 && !mReadQueueL.empty())
+					{
+						channelData[i] = mReadQueueL.front();
+						mReadQueueL.pop_front();
+					}
+					if (channel == 1 && !mReadQueueR.empty())
+					{
+						channelData[i] = mReadQueueR.front();
+						mReadQueueR.pop_front();
+					}
+				}
+			}
+			writerSource->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
+		}
+
+		delete writerSource;
+	}
+	else 
+	{
+		jassertfalse;
+	}
 }
 
 SuperSlowAudioProcessor::Mode SuperSlowAudioProcessor::getMode() const
 {
+	const ScopedLock myScopedLock(mCriticalSection);
 	return mMode;
 }
 
