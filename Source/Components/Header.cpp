@@ -17,7 +17,7 @@ Header::Header(SuperSlowAudioProcessor& p)
 
 	addAndMakeVisible(mSliderDelta);
 	mSliderDelta.setSliderStyle(Slider::SliderStyle::RotaryHorizontalVerticalDrag);
-	mSliderDelta.setTextBoxStyle(Slider::TextEntryBoxPosition::TextBoxBelow, true, 30, 10);
+	mSliderDelta.setTextBoxStyle(Slider::TextEntryBoxPosition::NoTextBox, true, 30, 10);
 	mSliderDelta.setRange(1, 16, 1);
 	mSliderDelta.onValueChange = [this]
 	{
@@ -27,7 +27,7 @@ Header::Header(SuperSlowAudioProcessor& p)
 
 	addAndMakeVisible(mSliderWet);
 	mSliderWet.setSliderStyle(Slider::SliderStyle::RotaryHorizontalVerticalDrag);
-	mSliderWet.setTextBoxStyle(Slider::TextEntryBoxPosition::TextBoxBelow, true, 30, 10);
+	mSliderWet.setTextBoxStyle(Slider::TextEntryBoxPosition::NoTextBox, true, 30, 10);
 	mSliderWet.setRange(1, 100, 1);
 	mSliderWet.onValueChange = [this]
 	{

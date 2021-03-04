@@ -17,11 +17,6 @@ SuperSlowAudioProcessorEditor::SuperSlowAudioProcessorEditor(SuperSlowAudioProce
 	, processor(p)
 	, _header(p)
 	, _bufferView(p)
-	, mButtonLoadFile("Select File")
-	, mToggleFast("Fast")
-	, mToggleNorm("Normal")
-	, mToggleSlow("Slow")
-	, mButtonExportFile("Export")
 {
 	setLookAndFeel(&style);
 
@@ -29,56 +24,6 @@ SuperSlowAudioProcessorEditor::SuperSlowAudioProcessorEditor(SuperSlowAudioProce
 
 	addAndMakeVisible(_header);
 	addAndMakeVisible(_bufferView);
-
-	addAndMakeVisible(mButtonLoadFile);
-	mButtonLoadFile.onClick = [this]
-	{
-		FileChooser fileChooser("Select audio file");
-                 
-		bool ok = fileChooser.browseForFileToOpen();
-		if(ok)
-		{
-			File result = fileChooser.getResult();
-			processor.setFile(result);
-		}
-	};
-
-	addAndMakeVisible(mSliderDelta);
-	mSliderDelta.setSliderStyle(Slider::SliderStyle::RotaryHorizontalVerticalDrag);
-	mSliderDelta.setRange(1, 16, 1);
-	mSliderDelta.onValueChange = [this]
-	{
-		processor.setDelta(mSliderDelta.getValue());
-	};
-
-
-	// Speed
-	addAndMakeVisible(mToggleFast);
-	mToggleFast.onClick = [this]
-	{
-		setPlayMode(SuperSlowAudioProcessor::Mode::Fast);
-	};
-	addAndMakeVisible(mToggleNorm);
-	mToggleNorm.onClick = [this]
-	{
-		setPlayMode(SuperSlowAudioProcessor::Mode::Norm);
-	};
-	addAndMakeVisible(mToggleSlow);
-	mToggleSlow.onClick = [this]
-	{
-		setPlayMode(SuperSlowAudioProcessor::Mode::Slow);
-	};
-
-	addAndMakeVisible(mButtonExportFile);
-	mButtonExportFile.onClick = [this]
-	{
-		processor.exportFile();
-	};
-
-	// Initialise buttons
-	setPlayState(processor.getPlayState());
-	setPlayMode(processor.getMode());
-
 }
 
 SuperSlowAudioProcessorEditor::~SuperSlowAudioProcessorEditor()
@@ -103,48 +48,4 @@ void SuperSlowAudioProcessorEditor::resized()
 	_header.setBounds(headerArea);
 	_bufferView.setBounds(bounds);
 
-//	auto height = 50;
-//	mButtonLoadFile.setBounds(bounds.removeFromTop(height).reduced(10));
-//	mSliderDelta.setBounds(bounds.removeFromTop(height).reduced(10));
-//	//mToggleFast.setBounds(bounds.removeFromTop(height).reduced(10));
-//	mToggleNorm.setBounds(bounds.removeFromTop(height).reduced(10));
-//	mToggleSlow.setBounds(bounds.removeFromTop(height).reduced(10));
-//	mButtonExportFile.setBounds(bounds.removeFromTop(height).reduced(10));
-}
-
-void SuperSlowAudioProcessorEditor::setPlayMode(const SuperSlowAudioProcessor::Mode& mode)
-{
-	processor.setMode(mode);
-	switch (mode)
-	{
-	case SuperSlowAudioProcessor::Mode::Fast:
-		
-		mToggleNorm.setToggleState(false, dontSendNotification);
-		mToggleSlow.setToggleState(false, dontSendNotification);
-		mToggleFast.setToggleState(true, dontSendNotification);
-		break;
-	case SuperSlowAudioProcessor::Mode::Norm:
-		mToggleNorm.setToggleState(true, dontSendNotification);
-		mToggleSlow.setToggleState(false, dontSendNotification);
-		mToggleFast.setToggleState(false, dontSendNotification);
-
-		break;
-	case SuperSlowAudioProcessor::Mode::Slow:
-		mToggleNorm.setToggleState(false, dontSendNotification);
-		mToggleSlow.setToggleState(true, dontSendNotification);
-		mToggleFast.setToggleState(false, dontSendNotification);
-
-		break;
-	}
-}
-
-void SuperSlowAudioProcessorEditor::setPlayState(const SuperSlowAudioProcessor::PlayState& playState)
-{
-	switch(playState)
-	{
-	case SuperSlowAudioProcessor::PlayState::Paused:
-		break;
-	case SuperSlowAudioProcessor::PlayState::Playing:
-		break;
-	}
 }

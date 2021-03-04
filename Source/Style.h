@@ -18,6 +18,11 @@ public:
 	Style() 
 	{
 		setColour(Slider::ColourIds::textBoxOutlineColourId, colors.invisible);
+		setColour(Slider::ColourIds::textBoxHighlightColourId, colors.invisible);
+		setColour(Slider::ColourIds::textBoxHighlightColourId, colors.invisible);
+		setColour(Label::ColourIds::outlineColourId, colors.invisible);
+
+		setColour(TextEditor::ColourIds::outlineColourId, colors.invisible);
 	};
 
 	~Style() {};
@@ -158,10 +163,33 @@ public:
 		}
 	} // fillTextEditorBackground
 
-	void drawTextEditorOutline(Graphics& g, int width, int height, TextEditor& textEditor)
+	void drawTextEditorOutline(Graphics& g, int width, int height, TextEditor& textEditor) override
 	{
 	}
 
+	Label* createSliderTextBox(Slider& slider) override
+	{
+		auto l = new Label();// SliderLabelComp();
+
+		l->setJustificationType(Justification::centred);
+		l->setKeyboardType(TextInputTarget::decimalKeyboard);
+
+		l->setColour(Label::textColourId, slider.findColour(Slider::textBoxTextColourId));
+		l->setColour(Label::backgroundColourId,
+			(slider.getSliderStyle() == Slider::LinearBar || slider.getSliderStyle() == Slider::LinearBarVertical)
+			? Colours::transparentBlack
+			: slider.findColour(Slider::textBoxBackgroundColourId));
+		l->setColour(Label::outlineColourId, slider.findColour(Slider::textBoxOutlineColourId));
+		l->setColour(TextEditor::textColourId, slider.findColour(Slider::textBoxTextColourId));
+		l->setColour(TextEditor::backgroundColourId,
+			slider.findColour(Slider::textBoxBackgroundColourId)
+			.withAlpha((slider.getSliderStyle() == Slider::LinearBar || slider.getSliderStyle() == Slider::LinearBarVertical)
+				? 0.7f : 1.0f));
+		l->setColour(TextEditor::outlineColourId, slider.findColour(Slider::textBoxOutlineColourId));
+		l->setColour(TextEditor::highlightColourId, slider.findColour(Slider::textBoxHighlightColourId));
+
+		return l;
+	}
 
 	struct StyleColours
 	{
@@ -181,7 +209,7 @@ public:
 		Colour tertiraryDark = Colour::fromRGB(198, 112, 0);
 
 		// Utilitity
-		Colour invisible = Colours::transparentWhite;
+		Colour invisible = Colours::transparentBlack;
 		Colour white = Colours::white;
 		Colour black = Colours::black;
 	} colors;

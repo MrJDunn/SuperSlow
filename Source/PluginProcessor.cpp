@@ -147,7 +147,7 @@ void SuperSlowAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffe
 	auto totalNumOutputChannels = getTotalNumOutputChannels();
 
 	ScopedNoDenormals noDenormals;
-
+/*
 	if (mReaderSource.get() == nullptr)
 	{
 		buffer.clear();
@@ -158,7 +158,7 @@ void SuperSlowAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffe
 		mTransportSource.setPosition(0.0);
 		mTransportSource.start();
 	}
-
+*/
 	switch (mMode)
 	{
 	case SuperSlowAudioProcessor::Norm:
@@ -259,6 +259,9 @@ void SuperSlowAudioProcessor::setFile(const File& file)
 void SuperSlowAudioProcessor::setMode(const Mode& mode)
 {
 	const ScopedLock myScopedLock(mCriticalSection);
+
+	mReadQueueL.clear();
+	mReadQueueR.clear();
 	mMode = mode;
 }
 
@@ -306,7 +309,7 @@ void SuperSlowAudioProcessor::playNorm(AudioBuffer<float>& buffer, int totalNumI
 {
 		while(mReadQueueL.size() < mSamplesPerBlock || mReadQueueR.size() < mSamplesPerBlock )
 		{
-			mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
+			//mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
 			int numSamples = buffer.getNumSamples();
 			
 			for (int channel = 0; channel < totalNumInputChannels; ++channel)
@@ -361,9 +364,9 @@ void SuperSlowAudioProcessor::playFast(AudioBuffer<float>& buffer, int totalNumI
 void SuperSlowAudioProcessor::playSlow(AudioBuffer<float>& buffer, int totalNumInputChannels)
 {
 	static juce::Random r;
-	while (mReadQueueL.size() < mSamplesPerBlock || mReadQueueR.size() < mSamplesPerBlock)
+	//while (mReadQueueL.size() < mSamplesPerBlock || mReadQueueR.size() < mSamplesPerBlock)
 	{
-		mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
+		//mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
 
 		int numSamples = buffer.getNumSamples();
 
