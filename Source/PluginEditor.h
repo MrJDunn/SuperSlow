@@ -12,6 +12,9 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "PluginProcessor.h"
+#include "Style.h"
+#include "Components/Header.h"
+#include "Components/BufferView.h"
 
 //==============================================================================
 /**
@@ -31,12 +34,23 @@ private:
     // access the processor object that created it.
     SuperSlowAudioProcessor& processor;
 
+	Header _header;
+	BufferView _bufferView;
+
 	TextButton mButtonLoadFile;
+
 	Slider mSliderDelta;
+
 	ToggleButton mToggleFast;
 	ToggleButton mToggleNorm;
 	ToggleButton mToggleSlow;
+	
 	TextButton mButtonExportFile;
 
+private:
+	void setPlayMode(const SuperSlowAudioProcessor::Mode& mode);
+	void setPlayState(const SuperSlowAudioProcessor::PlayState& playState);
+
+	Style style;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SuperSlowAudioProcessorEditor)
 };

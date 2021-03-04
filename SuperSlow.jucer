@@ -3,6 +3,24 @@
 <JUCERPROJECT id="BXejBS" name="SuperSlow" projectType="audioplug" jucerVersion="5.4.3">
   <MAINGROUP id="t8DuwV" name="SuperSlow">
     <GROUP id="{6D287A18-30B0-BB71-5029-6481D5D61305}" name="Source">
+      <GROUP id="{A1F916FA-6DFD-811E-277B-56A72595402F}" name="Components">
+        <FILE id="rdw22Q" name="BufferView.cpp" compile="1" resource="0" file="Source/Components/BufferView.cpp"/>
+        <FILE id="hUERiC" name="BufferView.h" compile="0" resource="0" file="Source/Components/BufferView.h"/>
+        <FILE id="VwNKtN" name="Header.cpp" compile="1" resource="0" file="Source/Components/Header.cpp"/>
+        <FILE id="mkVCVv" name="Header.h" compile="0" resource="0" file="Source/Components/Header.h"/>
+      </GROUP>
+      <GROUP id="{E06A6503-135C-A773-F986-A5DF94A62401}" name="Processors">
+        <FILE id="EbwsyQ" name="InterpolationBase.h" compile="0" resource="0"
+              file="Source/Processors/InterpolationBase.h"/>
+        <FILE id="xaW1c1" name="LinearInterpolation.cpp" compile="1" resource="0"
+              file="Source/Processors/LinearInterpolation.cpp"/>
+        <FILE id="fZW7Jx" name="LinearInterpolation.h" compile="0" resource="0"
+              file="Source/Processors/LinearInterpolation.h"/>
+        <FILE id="kTrZmR" name="RandomInterpolation.cpp" compile="1" resource="0"
+              file="Source/Processors/RandomInterpolation.cpp"/>
+        <FILE id="qLDIgh" name="RandomInterpolation.h" compile="0" resource="0"
+              file="Source/Processors/RandomInterpolation.h"/>
+      </GROUP>
       <FILE id="XSYdg1" name="PluginProcessor.cpp" compile="1" resource="0"
             file="Source/PluginProcessor.cpp"/>
       <FILE id="Ufd7o6" name="PluginProcessor.h" compile="0" resource="0"
@@ -10,6 +28,7 @@
       <FILE id="LiBN8C" name="PluginEditor.cpp" compile="1" resource="0"
             file="Source/PluginEditor.cpp"/>
       <FILE id="durtcO" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
+      <FILE id="DPKzOu" name="Style.h" compile="0" resource="0" file="Source/Style.h"/>
     </GROUP>
   </MAINGROUP>
   <EXPORTFORMATS>

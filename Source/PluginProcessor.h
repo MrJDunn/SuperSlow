@@ -27,6 +27,20 @@ public:
 		Fast,
 		Slow
 	};
+
+	enum PlayState
+	{
+		Playing,
+		Paused
+	};
+
+	enum Interpolation
+	{
+		None = 0,
+		Linear,
+		Random
+	};
+
     //==============================================================================
     SuperSlowAudioProcessor();
     ~SuperSlowAudioProcessor();
@@ -64,13 +78,25 @@ public:
     void getStateInformation (MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+	int getDelta();
 	void setDelta(int delta);
 	void setFile(const File&);
 
 	Mode getMode() const;
 	void setMode(const Mode& mode);
 
+	PlayState getPlayState() const;
+	void setPlayState(const PlayState& playState);
+
+	Interpolation getInterpolation() const;
+	void setInterpolation(const Interpolation& interpolation);
+
+	float getWet();
+	void setWet(float wet);
+
 	void exportFile();
+	std::vector<float> getBuffer();
+
 private:
 	void playNorm(AudioBuffer<float>&, int);
 	void playFast(AudioBuffer<float>&, int);
@@ -83,6 +109,7 @@ private:
 
 	std::deque<float> mReadQueueL;
 	std::deque<float> mReadQueueR;
+	std::deque<float> mHistoryBuffer;
 
 	Mode mMode;
 
@@ -92,6 +119,10 @@ private:
 
 	double mSampleRate = 44100.0;
 	int mSamplesPerBlock = 512;
+
+	PlayState mPlayState;
+	Interpolation mInterpolation = Interpolation::Linear;
+	float mWet = 1.0f;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SuperSlowAudioProcessor)

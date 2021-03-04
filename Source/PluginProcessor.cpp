@@ -22,12 +22,13 @@ SuperSlowAudioProcessor::SuperSlowAudioProcessor()
 		.withOutput("Output", AudioChannelSet::stereo(), true)
 #endif
 	)
-	, mMode(Mode::Slow)
+	, mMode(Mode::Norm)
 	, mDelta(2)
+	, mPlayState(PlayState::Paused)
 #endif
 {
 	mFormatManager.registerBasicFormats();
-	
+
 	File file("C:\\Users\\Jeff\\Music\\Diceworld-sinister_v1.wav");
 	setFile(file);
 }
@@ -105,6 +106,8 @@ void SuperSlowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlo
 
 	mSampleRate = sampleRate;
 	mSamplesPerBlock = samplesPerBlock;
+	
+	mHistoryBuffer.resize(mSamplesPerBlock);
 }
 
 void SuperSlowAudioProcessor::releaseResources()
@@ -183,11 +186,13 @@ void SuperSlowAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffe
 	for (int channel = 0; channel < totalNumInputChannels; ++channel)
 	{
 		auto* channelData = buffer.getWritePointer(channel);
-		for (int i = 0; i < getBlockSize(); ++i)
+		for (int i = 0; i < mSamplesPerBlock; ++i)
 		{
 			if (channel == 0 && !mReadQueueL.empty())
 			{
 				channelData[i] = mReadQueueL.front();
+				mHistoryBuffer.push_back(channelData[i]);
+				mHistoryBuffer.pop_front();
 				mReadQueueL.pop_front();
 			}
 			if (channel == 1 && !mReadQueueR.empty())
@@ -224,6 +229,13 @@ void SuperSlowAudioProcessor::setStateInformation(const void* data, int sizeInBy
 	// whose contents will have been created by the getStateInformation() call.
 }
 
+int SuperSlowAudioProcessor::getDelta()
+{
+	const ScopedLock myScopedLock(mCriticalSection);
+
+	return mDelta;
+}
+
 void SuperSlowAudioProcessor::setDelta(int delta)
 {
 	const ScopedLock myScopedLock(mCriticalSection);
@@ -250,9 +262,49 @@ void SuperSlowAudioProcessor::setMode(const Mode& mode)
 	mMode = mode;
 }
 
+SuperSlowAudioProcessor::PlayState SuperSlowAudioProcessor::getPlayState() const
+{
+	return mPlayState;
+}
+
+void SuperSlowAudioProcessor::setPlayState(const PlayState & playState)
+{
+	mPlayState = playState;
+	mReadQueueL.clear();
+	mReadQueueR.clear();
+}
+
+SuperSlowAudioProcessor::Interpolation SuperSlowAudioProcessor::getInterpolation() const
+{
+	return mInterpolation;
+}
+
+void SuperSlowAudioProcessor::setInterpolation(const Interpolation & interpolation)
+{
+	mInterpolation = interpolation;
+}
+
+float SuperSlowAudioProcessor::getWet()
+{
+	return mWet;
+}
+
+void SuperSlowAudioProcessor::setWet(float wet)
+{
+	if(wet >= 0.0 && wet <= 1.0)
+	{
+		mWet = wet;
+	}
+	else 
+	{
+		// Wet values are normalized (0 <= wet <= 1)
+		jassertfalse;
+	}
+}
+
 void SuperSlowAudioProcessor::playNorm(AudioBuffer<float>& buffer, int totalNumInputChannels)
 {
-		while(mReadQueueL.size() < getBlockSize() || mReadQueueR.size() < getBlockSize())
+		while(mReadQueueL.size() < mSamplesPerBlock || mReadQueueR.size() < mSamplesPerBlock )
 		{
 			mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
 			int numSamples = buffer.getNumSamples();
@@ -281,7 +333,7 @@ void SuperSlowAudioProcessor::playNorm(AudioBuffer<float>& buffer, int totalNumI
 
 void SuperSlowAudioProcessor::playFast(AudioBuffer<float>& buffer, int totalNumInputChannels)
 {
-	while (mReadQueueL.size() < getBlockSize() || mReadQueueR.size() < getBlockSize())
+	while (mReadQueueL.size() < mSamplesPerBlock || mReadQueueR.size() < mSamplesPerBlock)
 	{
 		mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
 		int numSamples = buffer.getNumSamples();
@@ -308,7 +360,8 @@ void SuperSlowAudioProcessor::playFast(AudioBuffer<float>& buffer, int totalNumI
 
 void SuperSlowAudioProcessor::playSlow(AudioBuffer<float>& buffer, int totalNumInputChannels)
 {
-	while (mReadQueueL.size() < getBlockSize() || mReadQueueR.size() < getBlockSize())
+	static juce::Random r;
+	while (mReadQueueL.size() < mSamplesPerBlock || mReadQueueR.size() < mSamplesPerBlock)
 	{
 		mTransportSource.getNextAudioBlock(AudioSourceChannelInfo(buffer));
 
@@ -324,13 +377,13 @@ void SuperSlowAudioProcessor::playSlow(AudioBuffer<float>& buffer, int totalNumI
 			{
 				for (int j = 0; j < mDelta; ++j)
 				{
-					if (i + 1 < getBlockSize())
+					if (i + 1 < mSamplesPerBlock)
 					{
-						float lerpTarget = channelData[i + 1];
+						float lerpTarget = mInterpolation == Interpolation::None ? channelData[i] : channelData[i + 1];
 						stepSize = (lerpTarget - channelData[i]) / (float)mDelta;
 					}
 
-					float interpolatedAmplitude = channelData[i] + stepSize * j;
+					float interpolatedAmplitude = channelData[i] + stepSize * j + (mInterpolation == Interpolation::Random ? r.nextFloat() / 750.0f : 0.0f);
 
 					if (channel == 0)
 					{
@@ -341,6 +394,19 @@ void SuperSlowAudioProcessor::playSlow(AudioBuffer<float>& buffer, int totalNumI
 						mReadQueueR.push_back(interpolatedAmplitude);
 					}
 				}
+
+				// Mix in wet signal
+				/*
+				if (channel == 0)
+				{
+					*(mReadQueueL.begin() + i) += channelData[i] * mWet;
+				}
+				if (channel == 1)
+				{
+					*(mReadQueueR.begin() + i) += channelData[i] * mWet;
+				}
+*/
+
 			}
 
 		}
@@ -432,9 +498,20 @@ void SuperSlowAudioProcessor::exportFile()
 	}
 }
 
+std::vector<float> SuperSlowAudioProcessor::getBuffer()
+{
+	const ScopedLock lock(mCriticalSection);
+
+	std::vector<float> buf(mSamplesPerBlock);
+
+	std::copy(mHistoryBuffer.begin(), mHistoryBuffer.end(), buf.begin());
+
+	return buf;
+}
+
 SuperSlowAudioProcessor::Mode SuperSlowAudioProcessor::getMode() const
 {
-	const ScopedLock myScopedLock(mCriticalSection);
+	const ScopedLock lock(mCriticalSection);
 	return mMode;
 }
 
