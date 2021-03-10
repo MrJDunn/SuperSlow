@@ -80,7 +80,6 @@ public:
 
 	int getDelta();
 	void setDelta(int delta);
-	void setFile(const File&);
 
 	Mode getMode() const;
 	void setMode(const Mode& mode);
@@ -94,13 +93,15 @@ public:
 	float getWet();
 	void setWet(float wet);
 
-	void exportFile();
 	std::vector<float> getBuffer();
 
 private:
 	void playNorm(AudioBuffer<float>&, int);
 	void playFast(AudioBuffer<float>&, int);
 	void playSlow(AudioBuffer<float>&, int);
+	void clearQueues();
+
+	void handleStateChange();
 
 private:
 	juce::AudioFormatManager mFormatManager;
@@ -123,6 +124,8 @@ private:
 	PlayState mPlayState;
 	Interpolation mInterpolation = Interpolation::Linear;
 	float mWet = 1.0f;
+
+	AudioProcessorValueTreeState state;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SuperSlowAudioProcessor)

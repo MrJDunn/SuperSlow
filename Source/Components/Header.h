@@ -13,7 +13,7 @@
 #include <JuceHeader.h>
 #include "../PluginProcessor.h"
 
-class Header : public Component 
+class Header : public Component, public Timer
 {
 public: 
 	Header(SuperSlowAudioProcessor& p);
@@ -27,9 +27,11 @@ private:
 
 	Label mLabelDelta{ "MULTIPLIER", "MULTIPLIER" };
 	Slider mSliderDelta;
+	Label mLabelDeltaDisplay;
 
 	Label mLabelWet{ "WET/DRY", "WET/DRY" };
 	Slider mSliderWet;
+	Label mLabelWetDisplay;
 
 	Label mLabelInterpolation{ "INTERPOLATION", "INTERPOLATION" };
 	Label mLabelNone{ "NONE", "NONE" };
@@ -41,10 +43,25 @@ private:
 	ToggleButton mToggleInterpolationRandom;
 
 	Label mLabelEnabled{ "ENABLED", "ENABLED" };
-	ToggleButton mOnOff;
+	ToggleButton mToggleEnabled;
+	Label mLabelEnabledDisplay;
 
 private:
-	void setPlayMode(const SuperSlowAudioProcessor::Mode& mode);
+
+	float getMode();
+	void setMode(const SuperSlowAudioProcessor::Mode& mode);
+
+	float getInterpolation();
 	void setInterpolation(const SuperSlowAudioProcessor::Interpolation& interpolation);
 
-}; 
+	float getWet();
+	void setWet(float wet);
+
+	float getDelta();
+	void setDelta(float delta);
+
+	void handleStateChange();
+
+	// Inherited via Timer
+	virtual void timerCallback() override;
+};

@@ -15,58 +15,9 @@ Header::Header(SuperSlowAudioProcessor& p)
 {
 	setOpaque(false);
 
-	addAndMakeVisible(mSliderDelta);
-	mSliderDelta.setSliderStyle(Slider::SliderStyle::RotaryHorizontalVerticalDrag);
-	mSliderDelta.setTextBoxStyle(Slider::TextEntryBoxPosition::NoTextBox, true, 30, 10);
-	mSliderDelta.setRange(1, 16, 1);
-	mSliderDelta.onValueChange = [this]
-	{
-		_processor.setDelta(mSliderDelta.getValue());
-	};
-
-
-	addAndMakeVisible(mSliderWet);
-	mSliderWet.setSliderStyle(Slider::SliderStyle::RotaryHorizontalVerticalDrag);
-	mSliderWet.setTextBoxStyle(Slider::TextEntryBoxPosition::NoTextBox, true, 30, 10);
-	mSliderWet.setRange(1, 100, 1);
-	mSliderWet.onValueChange = [this]
-	{
-		_processor.setWet((float)mSliderWet.getValue() / 100.f);
-		resized();
-	};
-
-	// Interpolation mode
-	addAndMakeVisible(mToggleInterpolationNone);
-	mToggleInterpolationNone.onClick = [this]
-	{
-		setInterpolation(SuperSlowAudioProcessor::Interpolation::None);
-	};
-	addAndMakeVisible(mToggleInterpolationLinear);
-	mToggleInterpolationLinear.onClick = [this]
-	{
-		setInterpolation(SuperSlowAudioProcessor::Interpolation::Linear);
-	};
-	addAndMakeVisible(mToggleInterpolationRandom);
-	mToggleInterpolationRandom.onClick = [this]
-	{
-		setInterpolation(SuperSlowAudioProcessor::Interpolation::Random);
-	};
-
-	addAndMakeVisible(mOnOff);
-	mOnOff.onClick = [this]
-	{
-		if(mOnOff.getToggleState())
-		{
-			setPlayMode(SuperSlowAudioProcessor::Mode::Slow);
-		}
-		else
-		{
-			setPlayMode(SuperSlowAudioProcessor::Mode::Norm);
-		}
-	};
-
 	auto boldFont = Font(8.f, 1);
 	auto notBoldFont = Font(8.f, 0);
+	auto smallerFont = Font(7.f, 0);
 
 	addAndMakeVisible(mLabelEnabled);
 	mLabelEnabled.setFont(boldFont);
@@ -75,6 +26,10 @@ Header::Header(SuperSlowAudioProcessor& p)
 	addAndMakeVisible(mLabelDelta);
 	mLabelDelta.setFont(boldFont);
 	mLabelDelta.setJustificationType(Justification::centred);
+
+	addAndMakeVisible(mLabelDeltaDisplay);
+	mLabelDeltaDisplay.setFont(smallerFont);
+	mLabelDeltaDisplay.setJustificationType(Justification::centred);
 
 	addAndMakeVisible(mLabelInterpolation);
 	mLabelInterpolation.setFont(boldFont);
@@ -96,11 +51,72 @@ Header::Header(SuperSlowAudioProcessor& p)
 	mLabelWet.setFont(boldFont);
 	mLabelWet.setJustificationType(Justification::centred);
 
+	addAndMakeVisible(mLabelWetDisplay);
+	mLabelWetDisplay.setFont(smallerFont);
+	mLabelWetDisplay.setJustificationType(Justification::centred);
+
+	addAndMakeVisible(mSliderDelta);
+	mSliderDelta.setSliderStyle(Slider::SliderStyle::RotaryHorizontalVerticalDrag);
+	mSliderDelta.setTextBoxStyle(Slider::TextEntryBoxPosition::NoTextBox, true, 30, 10);
+	mSliderDelta.setRange(1, 16, 1);
+	mSliderDelta.onValueChange = [this]
+	{
+		_processor.setDelta(mSliderDelta.getValue());
+		mLabelDeltaDisplay.setText("x " + String(_processor.getDelta()), dontSendNotification);
+	};
+
+
+	addAndMakeVisible(mSliderWet);
+	mSliderWet.setSliderStyle(Slider::SliderStyle::RotaryHorizontalVerticalDrag);
+	mSliderWet.setTextBoxStyle(Slider::TextEntryBoxPosition::NoTextBox, true, 30, 10);
+	mSliderWet.setRange(1, 100, 1);
+	mSliderWet.onValueChange = [this]
+	{
+		_processor.setWet((float)mSliderWet.getValue() / 100.f);
+		mLabelWetDisplay.setText(String(100 * _processor.getWet()) + " %", dontSendNotification);
+	};
+
+	// Interpolation mode
+	addAndMakeVisible(mToggleInterpolationNone);
+	mToggleInterpolationNone.onClick = [this]
+	{
+		setInterpolation(SuperSlowAudioProcessor::Interpolation::None);
+	};
+	addAndMakeVisible(mToggleInterpolationLinear);
+	mToggleInterpolationLinear.onClick = [this]
+	{
+		setInterpolation(SuperSlowAudioProcessor::Interpolation::Linear);
+	};
+	addAndMakeVisible(mToggleInterpolationRandom);
+	mToggleInterpolationRandom.onClick = [this]
+	{
+		setInterpolation(SuperSlowAudioProcessor::Interpolation::Random);
+	};
+
+	addAndMakeVisible(mToggleEnabled);
+	mToggleEnabled.onClick = [this]
+	{
+		if(mToggleEnabled.getToggleState())
+		{
+			setMode(SuperSlowAudioProcessor::Mode::Slow);
+		}
+		else
+		{
+			setMode(SuperSlowAudioProcessor::Mode::Norm);
+		}
+	};
+
+
 	// Initialise buttons
-	setPlayMode(_processor.getMode());
+	setMode(_processor.getMode());
 	setInterpolation(_processor.getInterpolation());
 	mSliderDelta.setValue(_processor.getDelta());
-	mSliderWet.setValue(_processor.getWet());
+	mSliderWet.setValue(100 * _processor.getWet());
+		
+	mLabelDeltaDisplay.setText("x " + String(_processor.getDelta()), dontSendNotification);
+	mLabelWetDisplay.setText(String(100 * _processor.getWet()) + " %", dontSendNotification);
+
+	startTimer(100);
 }
 
 Header::~Header()
@@ -115,14 +131,17 @@ void Header::resized()
 
 	auto labelHeight = 10;
 	auto width = 52;
+	auto dialSize = 35;
 
 	auto deltaBounds = bounds.removeFromLeft(width);
 	mLabelDelta.setBounds(deltaBounds.removeFromTop(labelHeight));
-	mSliderDelta.setBounds(deltaBounds);
+	mSliderDelta.setBounds(deltaBounds.removeFromTop(dialSize));
+	mLabelDeltaDisplay.setBounds(deltaBounds);
 
 	auto wetBounds = bounds.removeFromLeft(width);
 	mLabelWet.setBounds(wetBounds.removeFromTop(labelHeight));
-	mSliderWet.setBounds(wetBounds);
+	mSliderWet.setBounds(wetBounds.removeFromTop(dialSize));
+	mLabelWetDisplay.setBounds(wetBounds);
 
 	auto toggleBounds = bounds.removeFromLeft((float)width * 1.5f);
 
@@ -142,7 +161,7 @@ void Header::resized()
 
 	auto enabledBounds = bounds.removeFromLeft(width);
 	mLabelEnabled.setBounds(enabledBounds.removeFromTop(labelHeight));
-	mOnOff.setBounds(enabledBounds.removeFromRight(41));
+	mToggleEnabled.setBounds(enabledBounds.removeFromRight(41));
 }
 
 void Header::paint(Graphics& g)
@@ -161,7 +180,15 @@ void Header::paint(Graphics& g)
 	g.drawFittedText("SUPERSLOW", { 8,4,getWidth(),16 }, Justification::left, 1);
 }
 
-void Header::setPlayMode(const SuperSlowAudioProcessor::Mode& mode)
+float Header::getMode()
+{
+	if (mToggleEnabled.getToggleState())
+		return 2.0f;
+
+	return 0.0f;
+}
+
+void Header::setMode(const SuperSlowAudioProcessor::Mode& mode)
 {
 	_processor.setMode(mode);
 	switch (mode)
@@ -171,12 +198,26 @@ void Header::setPlayMode(const SuperSlowAudioProcessor::Mode& mode)
 		jassertfalse;
 		break;
 	case SuperSlowAudioProcessor::Mode::Norm:
-		mOnOff.setToggleState(false, dontSendNotification);
+		mToggleEnabled.setToggleState(false, dontSendNotification);
 		break;
 	case SuperSlowAudioProcessor::Mode::Slow:
-		mOnOff.setToggleState(true, dontSendNotification);
+		mToggleEnabled.setToggleState(true, dontSendNotification);
 		break;
 	}
+}
+
+float Header::getInterpolation()
+{
+	if (mToggleInterpolationNone.getToggleState())
+		return 0.0f;
+	if (mToggleInterpolationLinear.getToggleState())
+		return 1.0f;
+	if (mToggleInterpolationRandom.getToggleState())
+		return 2.0f;
+
+	// Invalid interpolation value! Look at your interpolation buttons
+	jassertfalse;
+	return -1.0f;
 }
 
 void Header::setInterpolation(const SuperSlowAudioProcessor::Interpolation & interpolation)
@@ -185,7 +226,6 @@ void Header::setInterpolation(const SuperSlowAudioProcessor::Interpolation & int
 	switch (interpolation)
 	{
 	case SuperSlowAudioProcessor::Interpolation::None:
-		
 		mToggleInterpolationNone.setToggleState(true, dontSendNotification);
 		mToggleInterpolationLinear.setToggleState(false, dontSendNotification);
 		mToggleInterpolationRandom.setToggleState(false, dontSendNotification);
@@ -194,14 +234,73 @@ void Header::setInterpolation(const SuperSlowAudioProcessor::Interpolation & int
 		mToggleInterpolationNone.setToggleState(false, dontSendNotification);
 		mToggleInterpolationLinear.setToggleState(true, dontSendNotification);
 		mToggleInterpolationRandom.setToggleState(false, dontSendNotification);
-
 		break;
 	case SuperSlowAudioProcessor::Interpolation::Random:
 		mToggleInterpolationNone.setToggleState(false, dontSendNotification);
 		mToggleInterpolationLinear.setToggleState(false, dontSendNotification);
 		mToggleInterpolationRandom.setToggleState(true, dontSendNotification);
-
 		break;
 	}
+}
+
+float Header::getWet()
+{
+	float val = mSliderWet.getValue() / 100.f;
+	return val;
+}
+
+void Header::setWet(float wet)
+{
+	_processor.setWet(wet);
+
+	mSliderWet.setValue(100 * wet);
+	mLabelWetDisplay.setText(String(100 * wet) + " %", dontSendNotification);
+}
+
+float Header::getDelta()
+{
+	return mSliderDelta.getValue();
+}
+
+void Header::setDelta(float delta)
+{	
+	_processor.setDelta(delta);
+
+	mSliderDelta.setValue(delta);
+	mLabelDeltaDisplay.setText("x " + String(delta), dontSendNotification);
+}
+
+void Header::handleStateChange()
+{
+	float delta = (float)_processor.getDelta();
+	float wet = (float)_processor.getWet();
+	float interpolation = (float)_processor.getInterpolation();
+	float mode = (float)_processor.getMode();
+
+	if (delta != getDelta())
+	{
+		setDelta(delta);
+	}
+	if (wet != getWet())
+	{
+		setWet(wet);
+	}
+
+	// There msut be a better way...
+	if(interpolation != getInterpolation())
+	{
+		setInterpolation(SuperSlowAudioProcessor::Interpolation(int(interpolation)));
+	} 
+
+	if (mode != getMode())
+	{
+		setMode(SuperSlowAudioProcessor::Mode(int(mode)));
+	}
+
+}
+
+void Header::timerCallback()
+{
+	handleStateChange();
 }
 

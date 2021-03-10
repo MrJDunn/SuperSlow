@@ -25,12 +25,15 @@ SuperSlowAudioProcessor::SuperSlowAudioProcessor()
 	, mMode(Mode::Norm)
 	, mDelta(2)
 	, mPlayState(PlayState::Paused)
+	, state(*this, nullptr, Identifier("SuperSlow"), 
+		{
+			std::make_unique<AudioParameterInt>("delta","Speed",1,16,2),
+			std::make_unique<AudioParameterFloat>("wet","Wet",0.0,1.0,1.0),
+			std::make_unique<AudioParameterChoice>("interpolation","Interpolation",StringArray("none","linear","random"),0),
+			std::make_unique<AudioParameterChoice>("mode","Enabled",StringArray("none","fast","slow"),0)
+		})
 #endif
 {
-	mFormatManager.registerBasicFormats();
-
-	File file("C:\\Users\\Jeff\\Music\\Diceworld-sinister_v1.wav");
-	setFile(file);
 }
 
 SuperSlowAudioProcessor::~SuperSlowAudioProcessor()
@@ -147,18 +150,15 @@ void SuperSlowAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffe
 	auto totalNumOutputChannels = getTotalNumOutputChannels();
 
 	ScopedNoDenormals noDenormals;
-/*
-	if (mReaderSource.get() == nullptr)
+	
+	handleStateChange();
+
+	//TODO: Replace with something that will keep timing better (qunatised to beats/bars)
+	if(mReadQueueL.size() > 10000000)
 	{
-		buffer.clear();
+		clearQueues();
 	}
 
-	if (!mTransportSource.isPlaying())
-	{
-		mTransportSource.setPosition(0.0);
-		mTransportSource.start();
-	}
-*/
 	switch (mMode)
 	{
 	case SuperSlowAudioProcessor::Norm:
@@ -218,15 +218,23 @@ AudioProcessorEditor* SuperSlowAudioProcessor::createEditor()
 //==============================================================================
 void SuperSlowAudioProcessor::getStateInformation(MemoryBlock& destData)
 {
-	// You should use this method to store your parameters in the memory block.
-	// You could do that either as raw data, or use the XML or ValueTree classes
-	// as intermediaries to make it easy to save and load complex data.
+	std::unique_ptr<juce::XmlElement> xml(state.copyState().createXml());
+	copyXmlToBinary(*xml, destData);
+
+	DBG(state.copyState().toXmlString());
 }
 
 void SuperSlowAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
-	// You should use this method to restore your parameters from this memory block,
-	// whose contents will have been created by the getStateInformation() call.
+	std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
+
+	if (xmlState.get() != nullptr)
+		if (xmlState->hasTagName(state.state.getType()))
+			state.replaceState(juce::ValueTree::fromXml(*xmlState));
+
+	handleStateChange();
+
+	DBG(state.copyState().toXmlString());
 }
 
 int SuperSlowAudioProcessor::getDelta()
@@ -240,29 +248,21 @@ void SuperSlowAudioProcessor::setDelta(int delta)
 {
 	const ScopedLock myScopedLock(mCriticalSection);
 
-	mDelta = delta;
-}
+	mDelta = delta;	
 
-void SuperSlowAudioProcessor::setFile(const File& file)
-{
-	const ScopedLock myScopedLock(mCriticalSection);
+	state.getParameterAsValue("delta").setValue(mDelta);
 
-	mFile = file;
-
-	auto reader = mFormatManager.createReaderFor(mFile);
-	auto source(new juce::AudioFormatReaderSource(reader, true));
-
-	mTransportSource.setSource(source, 0, nullptr, reader->sampleRate);
-	mReaderSource.reset(source);
 }
 
 void SuperSlowAudioProcessor::setMode(const Mode& mode)
 {
 	const ScopedLock myScopedLock(mCriticalSection);
 
-	mReadQueueL.clear();
-	mReadQueueR.clear();
 	mMode = mode;
+
+	clearQueues();
+	state.getParameterAsValue("mode").setValue(mMode);
+
 }
 
 SuperSlowAudioProcessor::PlayState SuperSlowAudioProcessor::getPlayState() const
@@ -273,8 +273,7 @@ SuperSlowAudioProcessor::PlayState SuperSlowAudioProcessor::getPlayState() const
 void SuperSlowAudioProcessor::setPlayState(const PlayState & playState)
 {
 	mPlayState = playState;
-	mReadQueueL.clear();
-	mReadQueueR.clear();
+	clearQueues();
 }
 
 SuperSlowAudioProcessor::Interpolation SuperSlowAudioProcessor::getInterpolation() const
@@ -285,6 +284,9 @@ SuperSlowAudioProcessor::Interpolation SuperSlowAudioProcessor::getInterpolation
 void SuperSlowAudioProcessor::setInterpolation(const Interpolation & interpolation)
 {
 	mInterpolation = interpolation;
+		
+	state.getParameterAsValue("interpolation").setValue(mInterpolation);
+
 }
 
 float SuperSlowAudioProcessor::getWet()
@@ -297,6 +299,9 @@ void SuperSlowAudioProcessor::setWet(float wet)
 	if(wet >= 0.0 && wet <= 1.0)
 	{
 		mWet = wet;
+		
+		state.getParameterAsValue("wet").setValue(mWet);
+	
 	}
 	else 
 	{
@@ -418,87 +423,36 @@ void SuperSlowAudioProcessor::playSlow(AudioBuffer<float>& buffer, int totalNumI
 	}
 }
 
-void SuperSlowAudioProcessor::exportFile()
+void SuperSlowAudioProcessor::clearQueues()
 {
-	const ScopedLock myScopedLock(mCriticalSection);
+	mReadQueueL.clear();
+	mReadQueueR.clear();
+}
 
-	int totalNumInputChannels = getTotalNumInputChannels();
-	int totalNumOutputChannels = getTotalNumOutputChannels();
-	AudioBuffer<float> buffer(totalNumInputChannels, mSamplesPerBlock);
+void SuperSlowAudioProcessor::handleStateChange()
+{
+	float delta = (float)state.getParameterAsValue("delta").getValue();
+	float wet = (float)state.getParameterAsValue("wet").getValue();
+	float interpolation = (float)state.getParameterAsValue("interpolation").getValue();
+	float mode = (float)state.getParameterAsValue("mode").getValue();
 
-
-	File testFile("C:\\Users\\Jeff\\Music\\test.wav");
-
-	if (testFile.existsAsFile())
-		testFile.deleteFile();
-
-	FileOutputStream* os = new FileOutputStream(testFile);
-
-	WavAudioFormat audioFormat;
-
-	juce::AudioFormatWriter* writerSource = audioFormat.createWriterFor(os, mSampleRate, totalNumInputChannels, 16,
-		WavAudioFormat::createBWAVMetadata("","","",Time::getCurrentTime(),0,""), 0);
-
-	if(writerSource != nullptr)
+	if (delta != mDelta)
 	{
-		mReadQueueL.clear();
-		mReadQueueR.clear();
-
-		setFile(mFile);
-		mTransportSource.setPosition(0.0);
-		mTransportSource.stop();
-		mTransportSource.start();
-
-		while (mTransportSource.isPlaying())
-		{
-			for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-				buffer.clear(i, 0, buffer.getNumSamples());
-
-			switch (mMode)
-			{
-			case SuperSlowAudioProcessor::Norm:
-				playNorm(buffer, totalNumInputChannels);
-				break;
-			case SuperSlowAudioProcessor::Fast:
-				playFast(buffer, totalNumInputChannels);
-				break;
-			case SuperSlowAudioProcessor::Slow:
-				playSlow(buffer, totalNumInputChannels);
-				break;
-			default:
-				break;
-			}
-
-			for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-				buffer.clear(i, 0, buffer.getNumSamples());
-
-			for (int channel = 0; channel < totalNumInputChannels; ++channel)
-			{
-				auto* channelData = buffer.getWritePointer(channel);
-
-				for (int i = 0; i < mSamplesPerBlock; ++i)
-				{
-					if (channel == 0 && !mReadQueueL.empty())
-					{
-						channelData[i] = mReadQueueL.front();
-						mReadQueueL.pop_front();
-					}
-					if (channel == 1 && !mReadQueueR.empty())
-					{
-						channelData[i] = mReadQueueR.front();
-						mReadQueueR.pop_front();
-					}
-				}
-			}
-			writerSource->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
-		}
-
-		delete writerSource;
+		setDelta(delta);
 	}
-	else 
+	if (wet != mWet)
 	{
-		jassertfalse;
+		setWet(wet);
 	}
+	if (interpolation != mInterpolation)
+	{
+		setInterpolation(Interpolation(int(interpolation)));
+	}
+	if (mode != mMode)
+	{
+		setMode(Mode(int(mode)));
+	}
+
 }
 
 std::vector<float> SuperSlowAudioProcessor::getBuffer()
