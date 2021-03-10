@@ -25,7 +25,7 @@ SuperSlowAudioProcessor::SuperSlowAudioProcessor()
 	, mMode(Mode::Norm)
 	, mDelta(2)
 	, mPlayState(PlayState::Paused)
-	, state(*this, nullptr, Identifier("SuperSlow"), 
+	, mState(*this, nullptr, Identifier("SuperSlow"), 
 		{
 			std::make_unique<AudioParameterInt>("delta","Speed",1,16,2),
 			std::make_unique<AudioParameterFloat>("wet","Wet",0.0,1.0,1.0),
@@ -146,6 +146,21 @@ void SuperSlowAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffe
 {
 	const ScopedLock myScopedLock(mCriticalSection);
 
+	AudioBuffer<float> dry = buffer;
+
+	mAudioPlayHead = getPlayHead();
+
+	if(mAudioPlayHead)
+	{
+		mAudioPlayHead->getCurrentPosition(positionInfo);
+
+		if (!positionInfo.isPlaying)
+		{
+			clearQueues();
+		}
+
+	}
+
 	auto totalNumInputChannels = getTotalNumInputChannels();
 	auto totalNumOutputChannels = getTotalNumOutputChannels();
 
@@ -202,6 +217,19 @@ void SuperSlowAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffe
 			}
 		}
 	}
+
+	// convolve dry and wet signals
+	/*
+	for (int channel = 0; channel < totalNumInputChannels; ++channel)
+	{
+		auto* channelData = buffer.getWritePointer(channel);
+		auto* dryData = dry.getWritePointer(channel);
+		for (int i = 0; i < mSamplesPerBlock; ++i)
+		{
+			channelData[i] = channelData[i] / getWet() + dryData[i] * getWet();
+		}
+	}
+	*/
 }
 
 //==============================================================================
@@ -218,10 +246,10 @@ AudioProcessorEditor* SuperSlowAudioProcessor::createEditor()
 //==============================================================================
 void SuperSlowAudioProcessor::getStateInformation(MemoryBlock& destData)
 {
-	std::unique_ptr<juce::XmlElement> xml(state.copyState().createXml());
+	std::unique_ptr<juce::XmlElement> xml(mState.copyState().createXml());
 	copyXmlToBinary(*xml, destData);
 
-	DBG(state.copyState().toXmlString());
+	DBG(mState.copyState().toXmlString());
 }
 
 void SuperSlowAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
@@ -229,12 +257,12 @@ void SuperSlowAudioProcessor::setStateInformation(const void* data, int sizeInBy
 	std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
 
 	if (xmlState.get() != nullptr)
-		if (xmlState->hasTagName(state.state.getType()))
-			state.replaceState(juce::ValueTree::fromXml(*xmlState));
+		if (xmlState->hasTagName(mState.state.getType()))
+			mState.replaceState(juce::ValueTree::fromXml(*xmlState));
 
 	handleStateChange();
 
-	DBG(state.copyState().toXmlString());
+	DBG(mState.copyState().toXmlString());
 }
 
 int SuperSlowAudioProcessor::getDelta()
@@ -250,7 +278,8 @@ void SuperSlowAudioProcessor::setDelta(int delta)
 
 	mDelta = delta;	
 
-	state.getParameterAsValue("delta").setValue(mDelta);
+	clearQueues();
+	mState.getParameterAsValue("delta").setValue(mDelta);
 
 }
 
@@ -261,7 +290,7 @@ void SuperSlowAudioProcessor::setMode(const Mode& mode)
 	mMode = mode;
 
 	clearQueues();
-	state.getParameterAsValue("mode").setValue(mMode);
+	mState.getParameterAsValue("mode").setValue(mMode);
 
 }
 
@@ -272,7 +301,10 @@ SuperSlowAudioProcessor::PlayState SuperSlowAudioProcessor::getPlayState() const
 
 void SuperSlowAudioProcessor::setPlayState(const PlayState & playState)
 {
+	const ScopedLock myScopedLock(mCriticalSection);
+
 	mPlayState = playState;
+
 	clearQueues();
 }
 
@@ -283,9 +315,12 @@ SuperSlowAudioProcessor::Interpolation SuperSlowAudioProcessor::getInterpolation
 
 void SuperSlowAudioProcessor::setInterpolation(const Interpolation & interpolation)
 {
+	const ScopedLock myScopedLock(mCriticalSection);
+
 	mInterpolation = interpolation;
 		
-	state.getParameterAsValue("interpolation").setValue(mInterpolation);
+	clearQueues();
+	mState.getParameterAsValue("interpolation").setValue(mInterpolation);
 
 }
 
@@ -300,7 +335,7 @@ void SuperSlowAudioProcessor::setWet(float wet)
 	{
 		mWet = wet;
 		
-		state.getParameterAsValue("wet").setValue(mWet);
+		mState.getParameterAsValue("wet").setValue(mWet);
 	
 	}
 	else 
@@ -403,18 +438,6 @@ void SuperSlowAudioProcessor::playSlow(AudioBuffer<float>& buffer, int totalNumI
 					}
 				}
 
-				// Mix in wet signal
-				/*
-				if (channel == 0)
-				{
-					*(mReadQueueL.begin() + i) += channelData[i] * mWet;
-				}
-				if (channel == 1)
-				{
-					*(mReadQueueR.begin() + i) += channelData[i] * mWet;
-				}
-*/
-
 			}
 
 		}
@@ -425,16 +448,22 @@ void SuperSlowAudioProcessor::playSlow(AudioBuffer<float>& buffer, int totalNumI
 
 void SuperSlowAudioProcessor::clearQueues()
 {
-	mReadQueueL.clear();
-	mReadQueueR.clear();
+	if(!mReadQueueL.empty())
+	{
+		mReadQueueL.clear();
+	}
+	if(!mReadQueueR.empty())
+	{
+		mReadQueueR.clear();
+	}
 }
 
 void SuperSlowAudioProcessor::handleStateChange()
 {
-	float delta = (float)state.getParameterAsValue("delta").getValue();
-	float wet = (float)state.getParameterAsValue("wet").getValue();
-	float interpolation = (float)state.getParameterAsValue("interpolation").getValue();
-	float mode = (float)state.getParameterAsValue("mode").getValue();
+	float delta = (float)mState.getParameterAsValue("delta").getValue();
+	float wet = (float)mState.getParameterAsValue("wet").getValue();
+	float interpolation = (float)mState.getParameterAsValue("interpolation").getValue();
+	float mode = (float)mState.getParameterAsValue("mode").getValue();
 
 	if (delta != mDelta)
 	{

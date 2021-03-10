@@ -125,8 +125,10 @@ private:
 	Interpolation mInterpolation = Interpolation::Linear;
 	float mWet = 1.0f;
 
-	AudioProcessorValueTreeState state;
+	AudioProcessorValueTreeState mState;
 
+	AudioPlayHead* mAudioPlayHead = nullptr;
+	AudioPlayHead::CurrentPositionInfo positionInfo;
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SuperSlowAudioProcessor)
 };
