@@ -146,7 +146,8 @@ void SuperSlowAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffe
 {
 	const ScopedLock myScopedLock(mCriticalSection);
 
-	AudioBuffer<float> dry = buffer;
+	AudioBuffer<float> dry;
+	dry.makeCopyOf(buffer, true);
 
 	mAudioPlayHead = getPlayHead();
 
@@ -219,17 +220,20 @@ void SuperSlowAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffe
 	}
 
 	// convolve dry and wet signals
-	/*
+	
 	for (int channel = 0; channel < totalNumInputChannels; ++channel)
 	{
 		auto* channelData = buffer.getWritePointer(channel);
 		auto* dryData = dry.getWritePointer(channel);
 		for (int i = 0; i < mSamplesPerBlock; ++i)
 		{
-			channelData[i] = channelData[i] / getWet() + dryData[i] * getWet();
+			float wetSample = channelData[i] * getWet();
+			float drySample = dryData[i] * (1.0f - getWet());
+
+			channelData[i] = wetSample + drySample;
 		}
 	}
-	*/
+	
 }
 
 //==============================================================================
@@ -246,6 +250,7 @@ AudioProcessorEditor* SuperSlowAudioProcessor::createEditor()
 //==============================================================================
 void SuperSlowAudioProcessor::getStateInformation(MemoryBlock& destData)
 {
+	const ScopedLock myScopedLock(mCriticalSection);
 	std::unique_ptr<juce::XmlElement> xml(mState.copyState().createXml());
 	copyXmlToBinary(*xml, destData);
 
@@ -254,6 +259,7 @@ void SuperSlowAudioProcessor::getStateInformation(MemoryBlock& destData)
 
 void SuperSlowAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
+	const ScopedLock myScopedLock(mCriticalSection);
 	std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
 
 	if (xmlState.get() != nullptr)
@@ -296,6 +302,7 @@ void SuperSlowAudioProcessor::setMode(const Mode& mode)
 
 SuperSlowAudioProcessor::PlayState SuperSlowAudioProcessor::getPlayState() const
 {
+	const ScopedLock myScopedLock(mCriticalSection);
 	return mPlayState;
 }
 
@@ -310,6 +317,7 @@ void SuperSlowAudioProcessor::setPlayState(const PlayState & playState)
 
 SuperSlowAudioProcessor::Interpolation SuperSlowAudioProcessor::getInterpolation() const
 {
+	const ScopedLock myScopedLock(mCriticalSection);
 	return mInterpolation;
 }
 
@@ -326,6 +334,7 @@ void SuperSlowAudioProcessor::setInterpolation(const Interpolation & interpolati
 
 float SuperSlowAudioProcessor::getWet()
 {
+	const ScopedLock myScopedLock(mCriticalSection);
 	return mWet;
 }
 
